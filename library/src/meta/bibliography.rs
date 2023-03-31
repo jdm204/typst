@@ -8,7 +8,7 @@ use hayagriva::io::{BibLaTeXError, YamlBibliographyError};
 use hayagriva::style::{self, Brackets, Citation, Database, DisplayString, Formatting};
 use hayagriva::Entry;
 
-use super::{LocalName, RefElem};
+use super::{LinkElem, LocalName, RefElem};
 use crate::layout::{BlockElem, GridElem, ParElem, Sizing, TrackSizings, VElem};
 use crate::meta::HeadingElem;
 use crate::prelude::*;
@@ -183,6 +183,7 @@ impl LocalName for BibliographyElem {
     fn local_name(&self, lang: Lang) -> &'static str {
         match lang {
             Lang::GERMAN => "Bibliographie",
+            Lang::ITALIAN => "Bibliografia",
             Lang::ENGLISH | _ => "Bibliography",
         }
     }
@@ -613,7 +614,8 @@ fn format_display_string(
                 Formatting::Bold => content.strong(),
                 Formatting::Italic => content.emph(),
                 Formatting::Link(link) => {
-                    content.linked(Destination::Url(link.as_str().into()))
+                    LinkElem::new(Destination::Url(link.as_str().into()).into(), content)
+                        .pack()
                 }
             };
         }
