@@ -1,82 +1,116 @@
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+
+    flake-parts = {
+      url = "github:hercules-ci/flake-parts";
+      inputs.nixpkgs-lib.follows = "nixpkgs";
+    };
+
+    flake-utils.url = "github:numtide/flake-utils";
+
+    crane = {
+      url = "github:ipetkov/crane";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs }:
+  outputs = inputs@{ flake-parts, flake-utils, crane, nixpkgs, ... }:
     let
-      inherit (builtins)
-        substring
-        ;
-      inherit (nixpkgs.lib)
-        genAttrs
-        optionals
-        ;
+      # Generate the typst package for the given nixpkgs instance.
+      packageFor = pkgs:
+        let
+          inherit (nixpkgs.lib)
+            importTOML
+            optionals
+            sourceByRegex
+            ;
+          Cargo-toml = importTOML ./Cargo.toml;
 
-      eachSystem = f: genAttrs
-        [
-          "aarch64-darwin"
-          "aarch64-linux"
-          "x86_64-darwin"
-          "x86_64-linux"
-        ]
-        (system: f nixpkgs.legacyPackages.${system});
+          pname = "typst";
+          version = Cargo-toml.workspace.package.version;
 
-      rev = fallback:
-        if self ? rev then
-          substring 0 8 self.rev
-        else
-          fallback;
+          # Crane-based Nix flake configuration.
+          # Based on https://github.com/ipetkov/crane/blob/master/examples/trunk-workspace/flake.nix
 
-      packageFor = pkgs: pkgs.rustPlatform.buildRustPackage {
-        pname = "typst";
-        version = rev "00000000";
+          craneLib = crane.mkLib pkgs;
 
-        src = self;
+          # Typst files to include in the derivation.
+          # Here we include Rust files, assets and tests.
+          src = sourceByRegex ./. [
+            "(assets|crates|tests)(/.*)?"
+            ''Cargo\.(toml|lock)''
+            ''build\.rs''
+          ];
 
-        cargoLock = {
-          lockFile = ./Cargo.lock;
-          allowBuiltinFetchGit = true;
-        };
+          # Typst derivation's args, used within crane's derivation generation
+          # functions.
+          commonCraneArgs = {
+            inherit src pname version;
 
-        buildInputs = optionals pkgs.stdenv.isDarwin [
-          pkgs.darwin.apple_sdk.frameworks.CoreServices
-        ];
+            buildInputs = optionals pkgs.stdenv.isDarwin [
+              pkgs.darwin.apple_sdk.frameworks.CoreServices
+            ];
 
-        cargoBuildFlags = [ "-p" "typst-cli" ];
-        cargoTestFlags = [ "-p" "typst-cli" ];
+            nativeBuildInputs = [ pkgs.installShellFiles ];
+          };
 
-        TYPST_VERSION = rev "(unknown version)";
-      };
+          # Derivation with just the dependencies, so we don't have to keep
+          # re-building them.
+          cargoArtifacts = craneLib.buildDepsOnly commonCraneArgs;
+
+          typst = craneLib.buildPackage (commonCraneArgs // {
+            inherit cargoArtifacts;
+
+            postInstall = ''
+              installManPage crates/typst-cli/artifacts/*.1
+              installShellCompletion \
+                crates/typst-cli/artifacts/typst.{bash,fish} \
+                --zsh crates/typst-cli/artifacts/_typst
+            '';
+
+            GEN_ARTIFACTS = "artifacts";
+          });
+        in
+        typst;
     in
-    {
-      devShells = eachSystem (pkgs: {
-        default = pkgs.mkShell {
-          packages = with pkgs; [
-            cargo
-            clippy
-            rust-analyzer
-            rustc
-            rustfmt
-          ];
+    flake-parts.lib.mkFlake { inherit inputs; } {
+      systems = [
+        "aarch64-darwin"
+        "aarch64-linux"
+        "x86_64-darwin"
+        "x86_64-linux"
+      ];
 
-          buildInputs = optionals pkgs.stdenv.isDarwin [
-            pkgs.darwin.apple_sdk.frameworks.CoreServices
-            pkgs.libiconv
-          ];
-
-          RUST_SRC_PATH = pkgs.rustPlatform.rustLibSrc;
+      flake = {
+        overlays.default = _: prev: {
+          typst-dev = packageFor prev;
         };
-      });
-
-      formatter = eachSystem (pkgs: pkgs.nixpkgs-fmt);
-
-      overlays.default = _: prev: {
-        typst-dev = packageFor prev;
       };
 
-      packages = eachSystem (pkgs: {
-        default = packageFor pkgs;
-      });
+      perSystem = { pkgs, ... }:
+        let
+          inherit (pkgs) lib;
+          typst = packageFor pkgs;
+        in
+        {
+          packages.default = typst;
+
+          apps.default = flake-utils.lib.mkApp {
+            drv = typst;
+          };
+
+          devShells.default = pkgs.mkShell {
+            packages = with pkgs; [
+              rustc
+              cargo
+            ];
+
+            buildInputs = lib.optionals pkgs.stdenv.isDarwin [
+              pkgs.darwin.apple_sdk.frameworks.CoreServices
+              pkgs.libiconv
+            ];
+          };
+        };
     };
 }

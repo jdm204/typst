@@ -33,6 +33,11 @@
 #test((1, 2) + (3, 4), (1, 2, 3, 4))
 #test((a: 1) + (b: 2, c: 3), (a: 1, b: 2, c: 3))
 
+---
+// Error: 3-26 value is too large
+#(9223372036854775807 + 1)
+
+---
 // Subtraction.
 #test(1-4, 3*-1)
 #test(4cm - 2cm, 2cm)
@@ -74,11 +79,11 @@
   test(v + v, 2 * v)
 
   // Integer addition does not give a float.
-  if type(v) != "integer" {
+  if type(v) != int {
     test(v + v, 2.0 * v)
   }
 
-  if "relative" not in type(v) and ("pt" not in repr(v) or "em" not in repr(v)) {
+  if type(v) != relative and ("pt" not in repr(v) or "em" not in repr(v)) {
     test(v / v, 1.0)
   }
 }
@@ -108,6 +113,34 @@
     test(b / (b * 2 + a), 0.5)
   }
 }
+
+---
+// Test numbers with alternative bases.
+#test(0x10, 16)
+#test(0b1101, 13)
+#test(0xA + 0xa, 0x14)
+
+---
+// Error: 2-7 invalid binary number: 0b123
+#0b123
+
+---
+// Error: 2-8 invalid hexadecimal number: 0x123z
+#0x123z
+
+---
+// Test that multiplying infinite numbers by certain units does not crash.
+#(float("inf") * 1pt)
+#(float("inf") * 1em)
+#(float("inf") * (1pt + 1em))
+
+---
+// Test that trying to produce a NaN scalar (such as in lengths) does not crash.
+#let infpt = float("inf") * 1pt
+#test(infpt - infpt, 0pt)
+#test(infpt + (-infpt), 0pt)
+// TODO: this result is surprising
+#test(infpt / float("inf"), 0pt)
 
 ---
 // Test boolean operators.
@@ -187,7 +220,49 @@
 #(x += "thing") #test(x, "something")
 
 ---
-// Error: 3-6 cannot mutate a constant
+// Test destructuring assignments.
+
+#let a = none
+#let b = none
+#let c = none
+#((a,) = (1,))
+#test(a, 1)
+
+#((_, a, b, _) = (1, 2, 3, 4))
+#test(a, 2)
+#test(b, 3)
+
+#((a, b, ..c) = (1, 2, 3, 4, 5, 6))
+#test(a, 1)
+#test(b, 2)
+#test(c, (3, 4, 5, 6))
+
+#((a: a, b, x: c) = (a: 1, b: 2, x: 3))
+#test(a, 1)
+#test(b, 2)
+#test(c, 3)
+
+#let a = (1, 2)
+#((a: a.at(0), b) = (a: 3, b: 4))
+#test(a, (3, 2))
+#test(b, 4)
+
+#let a = (1, 2)
+#((a.at(0), b) = (3, 4))
+#test(a, (3, 2))
+#test(b, 4)
+
+#((a, ..b) = (1, 2, 3, 4))
+#test(a, 1)
+#test(b, (2, 3, 4))
+
+#let a = (1, 2)
+#((b, ..a.at(0)) = (1, 2, 3, 4))
+#test(a, ((2, 3, 4), 2))
+#test(b, 1)
+
+---
+// Error: 3-6 cannot mutate a constant: box
 #(box = 1)
 
 ---

@@ -1,5 +1,6 @@
 # General
 .vscode
+.idea
 _things
 desktop.ini
 .DS_Store
@@ -7,12 +8,12 @@ desktop.ini
 # Tests and benchmarks
 tests/png
 tests/pdf
+tests/svg
 tests/target
 tarpaulin-report.html
 
 # Rust
 /target
-bench/target
 **/*.rs.bk
 
 # Node

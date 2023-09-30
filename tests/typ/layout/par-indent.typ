@@ -9,10 +9,10 @@ The first paragraph has no indent.
 
 But the second one does.
 
-#box(image("/tiger.jpg", height: 6pt))
-starts a paragraph without indent.
+#box(image("/files/tiger.jpg", height: 6pt))
+starts a paragraph, also with indent.
 
-#align(center, image("/rhino.png", width: 1cm))
+#align(center, image("/files/rhino.png", width: 1cm))
 
 = Headings
 - And lists.
@@ -27,7 +27,6 @@ starts a paragraph without indent.
 دع النص يمطر عليك
 
 ثم يصبح النص رطبًا وقابل للطرق ويبدو المستند رائعًا.
-
 
 ---
 // This is madness.

@@ -1,13 +1,10 @@
-use std::path::Path;
-
 use comemo::{Prehashed, Track, Tracked};
 use iai::{black_box, main, Iai};
-use typst::diag::{FileError, FileResult};
-use typst::eval::Library;
+use typst::diag::FileResult;
+use typst::eval::{Bytes, Datetime, Library, Tracer};
 use typst::font::{Font, FontBook};
 use typst::geom::Color;
-use typst::syntax::{Source, SourceId};
-use typst::util::Buffer;
+use typst::syntax::{FileId, Source};
 use typst::World;
 use unscanny::Scanner;
 
@@ -30,8 +27,8 @@ fn bench_decode(iai: &mut Iai) {
         // We don't use chars().count() because that has a special
         // superfast implementation.
         let mut count = 0;
-        let mut chars = black_box(TEXT).chars();
-        while let Some(_) = chars.next() {
+        let chars = black_box(TEXT).chars();
+        for _ in chars {
             count += 1;
         }
         count
@@ -42,7 +39,7 @@ fn bench_scan(iai: &mut Iai) {
     iai.run(|| {
         let mut count = 0;
         let mut scanner = Scanner::new(black_box(TEXT));
-        while let Some(_) = scanner.eat() {
+        while scanner.eat().is_some() {
             count += 1;
         }
         count
@@ -61,7 +58,7 @@ fn bench_edit(iai: &mut Iai) {
 fn bench_eval(iai: &mut Iai) {
     let world = BenchWorld::new();
     let route = typst::eval::Route::default();
-    let mut tracer = typst::eval::Tracer::default();
+    let mut tracer = typst::eval::Tracer::new();
     iai.run(|| {
         typst::eval::eval(world.track(), route.track(), tracer.track_mut(), &world.source)
             .unwrap()
@@ -71,7 +68,7 @@ fn bench_eval(iai: &mut Iai) {
 fn bench_typeset(iai: &mut Iai) {
     let world = BenchWorld::new();
     let route = typst::eval::Route::default();
-    let mut tracer = typst::eval::Tracer::default();
+    let mut tracer = typst::eval::Tracer::new();
     let module = typst::eval::eval(
         world.track(),
         route.track(),
@@ -85,12 +82,14 @@ fn bench_typeset(iai: &mut Iai) {
 
 fn bench_compile(iai: &mut Iai) {
     let world = BenchWorld::new();
-    iai.run(|| typst::compile(&world));
+    let mut tracer = Tracer::new();
+    iai.run(|| typst::compile(&world, &mut tracer));
 }
 
 fn bench_render(iai: &mut Iai) {
     let world = BenchWorld::new();
-    let document = typst::compile(&world).unwrap();
+    let mut tracer = Tracer::new();
+    let document = typst::compile(&world, &mut tracer).unwrap();
     iai.run(|| typst::export::render(&document.pages[0], 1.0, Color::WHITE))
 }
 
@@ -124,27 +123,27 @@ impl World for BenchWorld {
         &self.library
     }
 
-    fn main(&self) -> &Source {
-        &self.source
-    }
-
-    fn resolve(&self, path: &Path) -> FileResult<SourceId> {
-        Err(FileError::NotFound(path.into()))
-    }
-
-    fn source(&self, _: SourceId) -> &Source {
-        &self.source
-    }
-
     fn book(&self) -> &Prehashed<FontBook> {
         &self.book
+    }
+
+    fn main(&self) -> Source {
+        self.source.clone()
+    }
+
+    fn source(&self, _: FileId) -> FileResult<Source> {
+        unimplemented!()
+    }
+
+    fn file(&self, _: FileId) -> FileResult<Bytes> {
+        unimplemented!()
     }
 
     fn font(&self, _: usize) -> Option<Font> {
         Some(self.font.clone())
     }
 
-    fn file(&self, path: &Path) -> FileResult<Buffer> {
-        Err(FileError::NotFound(path.into()))
+    fn today(&self, _: Option<i64>) -> Option<Datetime> {
+        unimplemented!()
     }
 }
